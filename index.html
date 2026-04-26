@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscador de Arquivos - FileSearch</title>
+    
+    <!-- Bibliotecas na ordem correta -->
+    <script src="lib/jszip.min.js"></script>
+    <script src="lib/pdf.min.js"></script>
+    <script src="lib/mammoth.browser.min.js"></script>
+    
+    <!-- Configuração do PDF.js worker -->
+    <script>
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
+        }
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #202124;
+            color: #e8eaed;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-top: 80px;
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            font-size: 48px;
+            font-weight: 400;
+            color: #8ab4f8;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #9aa0a6;
+            font-size: 16px;
+        }
+
+        .main {
+            width: 100%;
+        }
+
+        .search-container {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            background: #303134;
+            border: 1px solid #5f6368;
+            border-radius: 24px;
+            padding: 8px 20px;
+            transition: all 0.3s;
+        }
+
+        .search-box:hover {
+            background: #3c4043;
+            border-color: #8ab4f8;
+            box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+        }
+
+        .search-box:focus-within {
+            background: #303134;
+            border-color: #8ab4f8;
+            box-shadow: 0 1px 6px rgba(138,180,248,0.3);
+        }
+
+        .search-icon {
+            margin-right: 12px;
+        }
+
+        .search-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #e8eaed;
+            font-size: 16px;
+            outline: none;
+            padding: 6px 0;
+        }
+
+        .search-input::placeholder {
+            color: #9aa0a6;
+        }
+
+        .clear-button {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background 0.2s;
+        }
+
+        .clear-button:hover {
+            background: #5f6368;
+        }
+
+        .search-button {
+            background: #8ab4f8;
+            color: #202124;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .search-button:hover {
+            background: #a4c2f4;
+            box-shadow: 0 2px 8px rgba(138,180,248,0.3);
+        }
+
+        .file-types {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background: #303134;
+            border: 1px solid #5f6368;
+            padding: 6px 16px;
+            border-radius: 16px;
+            font-size: 13px;
+            color: #9aa0a6;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 3px solid #303134;
+            border-top: 3px solid #8ab4f8;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .search-info {
+            color: #9aa0a6;
+            font-size: 14px;
+            margin-bottom: 20px;
+            padding: 0 10px;
+            display: none;
+        }
+
+        .results {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .result-item {
+            background: #303134;
+            border: 1px solid #3c4043;
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.2s;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-item:hover {
+            background: #3c4043;
+            border-color: #5f6368;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .result-title {
+            font-size: 18px;
+            color: #8ab4f8;
+            text-decoration: none;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .result-title:hover {
+            text-decoration: underline;
+        }
+
+        .result-snippet {
+            color: #9aa0a6;
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 4px 0;
+        }
+
+        .result-stats {
+            color: #80868b;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+
+        .highlight {
+            background: #fce8b2;
+            color: #202124;
+            padding: 2px 4px;
+            border-radius: 2px;
+            font-weight: 500;
+        }
+
+        .error {
+            display: none;
+            text-align: center;
+            padding: 40px;
+            color: #f28b82;
+        }
+
+        .error-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            margin-bottom: 30px;
+            width: 100%;
+        }
+
+        .upload-area {
+            border: 2px dashed #5f6368;
+            border-radius: 12px;
+            padding: 40px 25px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #303134;
+        }
+
+        .upload-area:hover {
+            border-color: #8ab4f8;
+            background: #3c4043;
+        }
+
+        .upload-area.dragover {
+            border-color: #8ab4f8;
+            background: rgba(138, 180, 248, 0.1);
+            transform: scale(1.02);
+        }
+
+        .upload-content {
+            pointer-events: none;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            color: #e8eaed;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            color: #80868b;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+
+        /* Uploaded Files */
+        .uploaded-files {
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .uploaded-file {
+            background: #303134;
+            border: 1px solid #5f6368;
+            border-radius: 8px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.2s;
+        }
+
+        .uploaded-file:hover {
+            background: #3c4043;
+            border-color: #8ab4f8;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .file-name {
+            color: #e8eaed;
+            font-size: 14px;
+        }
+
+        .file-size {
+            color: #9aa0a6;
+            font-size: 12px;
+        }
+
+        .remove-file {
+            background: none;
+            border: none;
+            color: #f28b82;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .remove-file:hover {
+            background: rgba(242, 139, 130, 0.2);
+            transform: scale(1.1);
+        }
+
+        /* Status sem arquivos */
+        .no-files-message {
+            text-align: center;
+            padding: 20px;
+            color: #9aa0a6;
+            font-size: 14px;
+            display: none;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            margin-top: 40px;
+            color: #80868b;
+            font-size: 12px;
+            border-top: 1px solid #3c4043;
+        }
+
+        @media (max-width: 600px) {
+            .header {
+                margin-top: 40px;
+            }
+            
+            .logo {
+                font-size: 32px;
+            }
+            
+            .search-container {
+                flex-direction: column;
+            }
+            
+            .search-button {
+                width: 100%;
+            }
+
+            .upload-area {
+                padding: 25px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="logo">📁 FileSearch</h1>
+            <p class="subtitle">Carregue seus arquivos e pesquise instantaneamente</p>
+        </header>
+
+        <main class="main">
+            <!-- Seção de Upload -->
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <span class="upload-icon">📤</span>
+                        <p class="upload-text">Arraste arquivos aqui ou clique para selecionar</p>
+                        <p class="upload-hint">Formatos aceitos: TXT, DOCX, PDF, MOBI, HTML, CSV, MD</p>
+                    </div>
+                    <input type="file" id="fileInput" multiple accept=".txt,.docx,.pdf,.mobi,.html,.htm,.csv,.md" style="display: none;">
+                </div>
+                <div id="uploadedFiles" class="uploaded-files"></div>
+                <div id="noFilesMessage" class="no-files-message">
+                    ⚠️ Nenhum arquivo carregado. Arraste arquivos para começar.
+                </div>
+            </div>
+
+            <!-- Barra de Pesquisa -->
+            <div class="search-container">
+                <div class="search-box">
+                    <svg class="search-icon" viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                    <input type="text" id="searchInput" class="search-input" placeholder="Pesquisar nos arquivos carregados..." autofocus>
+                    <button id="clearButton" class="clear-button" style="display: none;" aria-label="Limpar pesquisa">
+                        <svg viewBox="0 0 24 24" width="20" height="20">
+                            <path fill="#5f6368" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                    </button>
+                </div>
+                <button id="searchButton" class="search-button">
+                    🔍 Pesquisar
+                </button>
+            </div>
+
+            <!-- Tipos de arquivos suportados -->
+            <div class="file-types">
+                <span class="badge">📝 TXT</span>
+                <span class="badge">📄 DOCX</span>
+                <span class="badge">📕 PDF</span>
+                <span class="badge">📚 MOBI</span>
+                <span class="badge">📋 Outros</span>
+            </div>
+
+            <!-- Status de carregamento -->
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Pesquisando nos arquivos...</p>
+            </div>
+
+            <!-- Informações da pesquisa -->
+            <div id="searchInfo" class="search-info"></div>
+
+            <!-- Resultados da pesquisa -->
+            <div id="results" class="results"></div>
+
+            <!-- Mensagens de erro -->
+            <div id="error" class="error">
+                <div class="error-icon">⚠️</div>
+                <p id="errorMessage"></p>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>🔍 FileSearch v1.0 - Mecanismo de busca em arquivos</p>
+        </footer>
+    </div>
+
+    <script>
+        class FileSearchEngine {
+            constructor() {
+                this.files = [];
+                this.searchInput = document.getElementById('searchInput');
+                this.searchButton = document.getElementById('searchButton');
+                this.clearButton = document.getElementById('clearButton');
+                this.resultsDiv = document.getElementById('results');
+                this.searchInfo = document.getElementById('searchInfo');
+                this.loadingDiv = document.getElementById('loading');
+                this.errorDiv = document.getElementById('error');
+                this.errorMessage = document.getElementById('errorMessage');
+                this.uploadArea = document.getElementById('uploadArea');
+                this.fileInput = document.getElementById('fileInput');
+                this.uploadedFilesDiv = document.getElementById('uploadedFiles');
+                this.noFilesMessage = document.getElementById('noFilesMessage');
+                
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.setupPDFJS();
+                this.setupFileUpload();
+                this.updateNoFilesMessage();
+                console.log('🚀 FileSearch inicializado!');
+            }
+
+            setupPDFJS() {
+                if (typeof pdfjsLib !== 'undefined') {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
+                }
+            }
+
+            setupEventListeners() {
+                this.searchButton.addEventListener('click', () => this.performSearch());
+                
+                this.searchInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.performSearch();
+                });
+                
+                this.searchInput.addEventListener('input', (e) => {
+                    this.clearButton.style.display = e.target.value ? 'block' : 'none';
+                });
+                
+                this.clearButton.addEventListener('click', () => {
+                    this.searchInput.value = '';
+                    this.searchInput.focus();
+                    this.clearButton.style.display = 'none';
+                    this.clearResults();
+                });
+            }
+
+            setupFileUpload() {
+                this.uploadArea.addEventListener('click', () => {
+                    this.fileInput.click();
+                });
+                
+                this.fileInput.addEventListener('change', (e) => {
+                    this.handleFiles(e.target.files);
+                });
+                
+                this.uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    this.uploadArea.classList.add('dragover');
+                });
+                
+                this.uploadArea.addEventListener('dragleave', () => {
+                    this.uploadArea.classList.remove('dragover');
+                });
+                
+                this.uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    this.uploadArea.classList.remove('dragover');
+                    this.handleFiles(e.dataTransfer.files);
+                });
+            }
+
+            handleFiles(fileList) {
+                Array.from(fileList).forEach(file => {
+                    const extension = file.name.split('.').pop().toLowerCase();
+                    const supportedExtensions = ['txt', 'docx', 'pdf', 'mobi', 'html', 'htm', 'csv', 'md'];
+                    
+                    if (!supportedExtensions.includes(extension)) {
+                        alert(`Formato não suportado: ${file.name}\n\nFormatos aceitos: TXT, DOCX, PDF, MOBI, HTML, CSV, MD`);
+                        return;
+                    }
+                    
+                    // Verifica se já existe
+                    const exists = this.files.some(f => f.name === file.name);
+                    if (exists) {
+                        alert(`Arquivo "${file.name}" já foi carregado.`);
+                        return;
+                    }
+                    
+                    const fileEntry = {
+                        name: file.name,
+                        type: extension,
+                        size: file.size,
+                        fileObject: file
+                    };
+                    
+                    this.files.push(fileEntry);
+                    this.displayUploadedFile(fileEntry);
+                    console.log(`📤 Arquivo carregado: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+                });
+                
+                this.updateNoFilesMessage();
+            }
+
+            displayUploadedFile(file) {
+                const fileSizeKB = (file.size / 1024).toFixed(1);
+                const icon = this.getFileIcon(file.type);
+                
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'uploaded-file';
+                fileDiv.innerHTML = `
+                    <div class="file-info">
+                        <span style="font-size: 20px;">${icon}</span>
+                        <div>
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-size">${fileSizeKB} KB</div>
+                        </div>
+                    </div>
+                    <button class="remove-file" data-filename="${file.name}">✕</button>
+                `;
+                
+                fileDiv.querySelector('.remove-file').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.files = this.files.filter(f => f.name !== file.name);
+                    fileDiv.remove();
+                    this.updateNoFilesMessage();
+                    console.log(`🗑️ Arquivo removido: ${file.name}`);
+                });
+                
+                this.uploadedFilesDiv.appendChild(fileDiv);
+            }
+
+            updateNoFilesMessage() {
+                this.noFilesMessage.style.display = this.files.length === 0 ? 'block' : 'none';
+            }
+
+            async readFileContent(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    
+                    reader.onload = async (e) => {
+                        let content = e.target.result;
+                        
+                        // Processa conforme o tipo
+                        if (file.type === 'docx' && typeof mammoth !== 'undefined') {
+                            try {
+                                const result = await mammoth.extractRawText({ arrayBuffer: content });
+                                content = result.value;
+                            } catch (err) {
+                                console.warn('Erro ao processar DOCX:', err);
+                            }
+                        } else if (file.type === 'pdf' && typeof pdfjsLib !== 'undefined') {
+                            try {
+                                const pdf = await pdfjsLib.getDocument({ data: content }).promise;
+                                content = '';
+                                for (let i = 1; i <= pdf.numPages; i++) {
+                                    const page = await pdf.getPage(i);
+                                    const text = await page.getTextContent();
+                                    content += text.items.map(item => item.str).join(' ') + '\n';
+                                }
+                            } catch (err) {
+                                console.warn('Erro ao processar PDF:', err);
+                            }
+                        }
+                        
+                        resolve(content);
+                    };
+                    
+                    reader.onerror = reject;
+                    
+                    if (file.type === 'txt' || file.type === 'html' || file.type === 'htm' || file.type === 'csv' || file.type === 'md') {
+                        reader.readAsText(file.fileObject);
+                    } else {
+                        reader.readAsArrayBuffer(file.fileObject);
+                    }
+                });
+            }
+
+            async performSearch() {
+                const query = this.searchInput.value.trim();
+                
+                if (!query) {
+                    this.showError('Por favor, digite um termo de pesquisa.');
+                    return;
+                }
+
+                if (this.files.length === 0) {
+                    this.showError('Nenhum arquivo carregado. Arraste arquivos para a área de upload primeiro.');
+                    return;
+                }
+
+                console.log(`🔍 Pesquisando por: "${query}" em ${this.files.length} arquivos`);
+                this.showLoading(true);
+                this.clearResults();
+
+                try {
+                    const searchResults = [];
+                    let totalOccurrences = 0;
+
+                    for (const file of this.files) {
+                        console.log(`📖 Processando: ${file.name}`);
+                        const content = await this.readFileContent(file);
+                        
+                        if (!content || content.trim() === '') continue;
+                        
+                        const occurrences = this.findAllOccurrences(content, query);
+                        
+                        if (occurrences.length > 0) {
+                            totalOccurrences += occurrences.length;
+                            searchResults.push({
+                                file: file,
+                                count: occurrences.length,
+                                snippets: this.generateSnippets(content, query, occurrences)
+                            });
+                            console.log(`   ${file.name}: ${occurrences.length} ocorrências`);
+                        }
+                    }
+
+                    this.displayResults(searchResults, query, totalOccurrences);
+                    
+                } catch (error) {
+                    console.error('❌ Erro na pesquisa:', error);
+                    this.showError('Ocorreu um erro durante a pesquisa. Tente novamente.');
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+
+            findAllOccurrences(content, query) {
+                const occurrences = [];
+                const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(escapedQuery, 'gi');
+                let match;
+                
+                while ((match = regex.exec(content)) !== null) {
+                    occurrences.push({
+                        index: match.index,
+                        context: content.substring(
+                            Math.max(0, match.index - 80),
+                            Math.min(content.length, match.index + query.length + 80)
+                        )
+                    });
+                }
+                
+                return occurrences;
+            }
+
+            generateSnippets(content, query, occurrences) {
+                return occurrences.slice(0, 3).map(occ => {
+                    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    return occ.context.replace(
+                        new RegExp(escapedQuery, 'gi'),
+                        match => `<span class="highlight">${match}</span>`
+                    );
+                });
+            }
+
+            displayResults(results, query, totalOccurrences) {
+                if (results.length === 0) {
+                    this.searchInfo.style.display = 'block';
+                    this.searchInfo.innerHTML = `
+                        <p>😕 Nenhum resultado encontrado para "<strong>${query}</strong>"</p>
+                        <p style="margin-top: 10px;">Sugestões:
+                            <ul style="margin: 8px 0 0 20px;">
+                                <li>Verifique a ortografia da palavra</li>
+                                <li>Tente palavras-chave diferentes</li>
+                                <li>Use termos mais genéricos</li>
+                                <li>Carregue mais arquivos para ampliar a busca</li>
+                            </ul>
+                        </p>
+                    `;
+                    return;
+                }
+
+                this.searchInfo.style.display = 'block';
+                this.searchInfo.innerHTML = `
+                    ✅ <strong>${totalOccurrences}</strong> ocorrência(s) encontrada(s) em 
+                    <strong>${results.length}</strong> arquivo(s) para "<strong>${query}</strong>"
+                `;
+
+                this.resultsDiv.innerHTML = results.map(result => `
+                    <div class="result-item">
+                        <div class="result-title">
+                            ${this.getFileIcon(result.file.type)} ${result.file.name}
+                        </div>
+                        ${result.snippets.map(s => `<div class="result-snippet">...${s}...</div>`).join('')}
+                        <div class="result-stats">
+                            📊 ${result.count} ocorrência(s) neste arquivo | 
+                            📄 ${result.file.type.toUpperCase()} | 
+                            📦 ${(result.file.size / 1024).toFixed(1)} KB
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            getFileIcon(type) {
+                const icons = {
+                    'txt': '📝', 'docx': '📄', 'pdf': '📕', 'mobi': '📚',
+                    'html': '🌐', 'htm': '🌐', 'css': '🎨', 'js': '⚡',
+                    'csv': '📊', 'md': '📋'
+                };
+                return icons[type] || '📄';
+            }
+
+            showLoading(show) {
+                this.loadingDiv.style.display = show ? 'block' : 'none';
+            }
+
+            clearResults() {
+                this.resultsDiv.innerHTML = '';
+                this.searchInfo.style.display = 'none';
+                this.errorDiv.style.display = 'none';
+            }
+
+            showError(message) {
+                this.clearResults();
+                this.errorDiv.style.display = 'block';
+                this.errorMessage.textContent = message;
+                setTimeout(() => {
+                    this.errorDiv.style.display = 'none';
+                }, 4000);
+            }
+        }
+
+        // Inicializa o sistema
+        document.addEventListener('DOMContentLoaded', () => {
+            new FileSearchEngine();
+        });
+    </script>
+</body>
+</html>
